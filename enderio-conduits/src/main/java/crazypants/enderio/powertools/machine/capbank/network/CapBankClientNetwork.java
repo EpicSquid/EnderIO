@@ -99,12 +99,13 @@ public class CapBankClientNetwork implements ICapBankNetwork {
   }
 
   @Override
-  public void destroyNetwork() {
+  public long destroyNetwork() {
     for (TileCapBank cb : members.values()) {
       cb.setNetworkId(-1);
       cb.setNetwork(null);
     }
     invalidateDisplayInfoCache();
+    return 0;
   }
 
   @Override
@@ -446,6 +447,31 @@ public class CapBankClientNetwork implements ICapBankNetwork {
   @Override
   public int getAverageIOPerTick() {
     return Math.round(getAverageChangePerTick());
+  }
+
+  @Override
+  public int extractEnergy(int maxExtract, boolean simulate) {
+    return 0;
+  }
+
+  @Override
+  public int getEnergyStored() {
+    return 0;
+  }
+
+  @Override
+  public int getMaxEnergyStored() {
+    return 0;
+  }
+
+  @Override
+  public boolean canExtract() {
+    return false;
+  }
+
+  @Override
+  public boolean canReceive() {
+    return false;
   }
 
 }

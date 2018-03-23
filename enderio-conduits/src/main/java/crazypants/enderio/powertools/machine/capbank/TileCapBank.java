@@ -9,23 +9,17 @@ import java.util.Map.Entry;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
-import com.enderio.core.common.NBTAction;
-import com.enderio.core.common.util.NNList;
 import com.enderio.core.common.util.NullHelper;
 
-import crazypants.enderio.base.Log;
 import crazypants.enderio.base.TileEntityEio;
 import crazypants.enderio.base.conduit.ConduitUtil;
 import crazypants.enderio.base.conduit.IConduitBundle;
-import crazypants.enderio.base.config.config.DiagnosticsConfig;
 import crazypants.enderio.base.machine.interfaces.IIoConfigurable;
 import crazypants.enderio.base.machine.modes.IoMode;
 import crazypants.enderio.base.machine.modes.RedstoneControlMode;
 import crazypants.enderio.base.network.PacketHandler;
 import crazypants.enderio.base.paint.IPaintable;
-import crazypants.enderio.base.power.ILegacyPowerReceiver;
 import crazypants.enderio.base.power.IPowerInterface;
-import crazypants.enderio.base.power.IPowerStorage;
 import crazypants.enderio.base.power.PowerHandlerUtil;
 import crazypants.enderio.powertools.init.PowerToolObject;
 import crazypants.enderio.powertools.machine.capbank.network.CapBankClientNetwork;
@@ -34,37 +28,27 @@ import crazypants.enderio.powertools.machine.capbank.network.EnergyReceptor;
 import crazypants.enderio.powertools.machine.capbank.network.ICapBankNetwork;
 import crazypants.enderio.powertools.machine.capbank.network.NetworkUtil;
 import crazypants.enderio.powertools.machine.capbank.packet.PacketNetworkIdRequest;
-import crazypants.enderio.util.NbtValue;
-import crazypants.enderio.util.Prep;
 import info.loenwind.autosave.annotations.Storable;
 import info.loenwind.autosave.annotations.Store;
 import info.loenwind.autosave.handlers.enderio.HandleIOMode;
-import info.loenwind.autosave.handlers.minecraft.HandleItemStack.HandleItemStackNNList;
 import net.minecraft.block.Block;
 import net.minecraft.block.state.IBlockState;
-import net.minecraft.item.ItemStack;
 import net.minecraft.tileentity.TileEntity;
 import net.minecraft.util.EnumFacing;
 import net.minecraft.util.math.AxisAlignedBB;
 import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.MathHelper;
+import net.minecraftforge.common.capabilities.Capability;
+import net.minecraftforge.energy.CapabilityEnergy;
 import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
 
 @Storable
-public class TileCapBank extends TileEntityEio implements ILegacyPowerReceiver, IIoConfigurable, IPowerStorage, IPaintable.IPaintableTileEntity {
+public class TileCapBank extends TileEntityEio implements IIoConfigurable, IPaintable.IPaintableTileEntity {
 
   @Store(handler = HandleIOMode.class)
   private Map<EnumFacing, IoMode> faceModes;
   @Store(handler = HandleDisplayMode.class)
   private Map<EnumFacing, InfoDisplayType> faceDisplayTypes;
-
-  @Store({ NBTAction.SAVE, NBTAction.CLIENT })
-  private int energyStored;
-  @Store
-  private int maxInput = -1;
-  @Store
-  private int maxOutput = -1;
 
   @Store
   private @Nonnull RedstoneControlMode inputControlMode = RedstoneControlMode.IGNORE;
@@ -78,8 +62,8 @@ public class TileCapBank extends TileEntityEio implements ILegacyPowerReceiver, 
 
   private ICapBankNetwork network;
 
-  @Store(handler = HandleItemStackNNList.class)
-  private final @Nonnull NNList<ItemStack> inventory = new NNList<>(4, ItemStack.EMPTY);
+  // Temporary energy holder for multiblock usage
+  private int tempEnergy = 0;
 
   // Client side reference to look up network state
   private int networkId = -1;
@@ -102,6 +86,14 @@ public class TileCapBank extends TileEntityEio implements ILegacyPowerReceiver, 
     revalidateDisplayTypes = true;
     // directly call updateReceptors() to work around issue #1433
     updateReceptors();
+  }
+
+  public void setEnergy(int energy) {
+    this.tempEnergy = energy;
+  }
+
+  public int getEnergy() {
+    return tempEnergy;
   }
 
   // ---------- Multiblock
@@ -461,69 +453,69 @@ public class TileCapBank extends TileEntityEio implements ILegacyPowerReceiver, 
   }
 
   // ----------- Power
-
-  @Override
-  public IPowerStorage getController() {
-    return network;
-  }
-
-  @Override
-  public long getEnergyStoredL() {
-    if (network == null) {
-      return getEnergyStored();
-    }
-    return network.getEnergyStoredL();
-  }
-
-  @Override
-  public long getMaxEnergyStoredL() {
-    if (network == null) {
-      return getMaxEnergyStored();
-    }
-    return network.getMaxEnergyStoredL();
-  }
-
-  @Override
-  public int getAverageIOPerTick() {
-    return network == null ? 0 : network.getAverageIOPerTick();
-  }
-
-  @Override
-  public boolean isOutputEnabled(@Nonnull EnumFacing direction) {
-    IoMode mode = getIoMode(direction);
-    return (mode == IoMode.PUSH || mode == IoMode.NONE) && isOutputEnabled();
-  }
-
-  private boolean isOutputEnabled() {
-    if (network == null) {
-      return true;
-    }
-    return network.isOutputEnabled();
-  }
-
-  @Override
-  public boolean isInputEnabled(@Nonnull EnumFacing direction) {
-    IoMode mode = getIoMode(direction);
-    return (mode == IoMode.PULL || mode == IoMode.NONE) && isInputEnabled();
-  }
-
-  private boolean isInputEnabled() {
-    if (network == null) {
-      return true;
-    }
-    return network.isInputEnabled();
-  }
-
-  @Override
-  public boolean isNetworkControlledIo(@Nonnull EnumFacing direction) {
-    IoMode mode = getIoMode(direction);
-    return mode == IoMode.NONE || mode == IoMode.PULL;
-  }
-
-  @Override
-  public boolean isCreative() {
-    return getType().isCreative();
-  }
+  //
+  // @Override
+  // public IPowerStorage getController() {
+  // return network;
+  // }
+  //
+  // @Override
+  // public long getEnergyStoredL() {
+  // if (network == null) {
+  // return getEnergyStored();
+  // }
+  // return network.getEnergyStoredL();
+  // }
+  //
+  // @Override
+  // public long getMaxEnergyStoredL() {
+  // if (network == null) {
+  // return getMaxEnergyStored();
+  // }
+  // return network.getMaxEnergyStoredL();
+  // }
+  //
+  // @Override
+  // public int getAverageIOPerTick() {
+  // return network == null ? 0 : network.getAverageIOPerTick();
+  // }
+  //
+  // @Override
+  // public boolean isOutputEnabled(@Nonnull EnumFacing direction) {
+  // IoMode mode = getIoMode(direction);
+  // return (mode == IoMode.PUSH || mode == IoMode.NONE) && isOutputEnabled();
+  // }
+  //
+  // private boolean isOutputEnabled() {
+  // if (network == null) {
+  // return true;
+  // }
+  // return network.isOutputEnabled();
+  // }
+  //
+  // @Override
+  // public boolean isInputEnabled(@Nonnull EnumFacing direction) {
+  // IoMode mode = getIoMode(direction);
+  // return (mode == IoMode.PULL || mode == IoMode.NONE) && isInputEnabled();
+  // }
+  //
+  // private boolean isInputEnabled() {
+  // if (network == null) {
+  // return true;
+  // }
+  // return network.isInputEnabled();
+  // }
+  //
+  // @Override
+  // public boolean isNetworkControlledIo(@Nonnull EnumFacing direction) {
+  // IoMode mode = getIoMode(direction);
+  // return mode == IoMode.NONE || mode == IoMode.PULL;
+  // }
+  //
+  // @Override
+  // public boolean isCreative() {
+  // return getType().isCreative();
+  // }
 
   public @Nonnull List<EnergyReceptor> getReceptors() {
     if (receptorsDirty) {
@@ -601,145 +593,140 @@ public class TileCapBank extends TileEntityEio implements ILegacyPowerReceiver, 
 
   // ------------------- Power -----------------
 
-  @Override
-  public void addEnergy(int energy) {
-    if (network == null) {
-      setEnergyStored(getEnergyStored() + energy);
-    } else {
-      network.addEnergy(energy);
-    }
-  }
-
-  @Override
-  public void setEnergyStored(int stored) {
-    energyStored = MathHelper.clamp(stored, 0, getMaxEnergyStored());
-    markDirty();
-  }
-
-  @Override
-  public int getEnergyStored() {
-    return energyStored;
-  }
-
-  @Override
-  public int getMaxEnergyStored() {
-    return getType().getMaxEnergyStored();
-  }
-
-  @Override
-  public int getMaxEnergyRecieved(EnumFacing dir) {
-    return getMaxInput();
-  }
-
-  @Override
-  public int getMaxInput() {
-    if (network == null) {
-      return getType().getMaxIO();
-    }
-    return network.getMaxInput();
-  }
-
-  public void setMaxInput(int maxInput) {
-    if (this.maxInput == maxInput) {
-      return;
-    }
-
-    if (DiagnosticsConfig.debugTraceCapLimitsExtremelyDetailed.get()) {
-      StringBuilder sb = new StringBuilder("CapBank ").append(this).append(" input changed from ").append(this.maxInput).append(" to ").append(maxInput);
-      for (StackTraceElement elem : new Exception("Stackstrace").getStackTrace()) {
-        sb.append(" at ").append(elem);
-      }
-      Log.warn(sb);
-    }
-    this.maxInput = maxInput;
-    markDirty();
-  }
-
-  public int getMaxInputOverride() {
-    return maxInput;
-  }
-
-  @Override
-  public int getMaxOutput() {
-    if (network == null) {
-      return getType().getMaxIO();
-    }
-    return network.getMaxOutput();
-  }
-
-  public void setMaxOutput(int maxOutput) {
-    if (this.maxOutput == maxOutput) {
-      return;
-    }
-
-    if (DiagnosticsConfig.debugTraceCapLimitsExtremelyDetailed.get()) {
-      StringBuilder sb = new StringBuilder("CapBank ").append(this).append(" output changed from ").append(this.maxOutput).append(" to ").append(maxOutput);
-      for (StackTraceElement elem : new Exception("Stackstrace").getStackTrace()) {
-        sb.append(" at ").append(elem);
-      }
-      Log.warn(sb);
-    }
-    this.maxOutput = maxOutput;
-    markDirty();
-  }
-
-  public int getMaxOutputOverride() {
-    return maxOutput;
-  }
-
-  @Override
-  public int receiveEnergy(EnumFacing from, int maxReceive, boolean simulate) {
-    if (network == null || from == null) {
-      return 0;
-    }
-    IoMode mode = getIoMode(from);
-    if (mode == IoMode.DISABLED || mode == IoMode.PUSH) {
-      return 0;
-    }
-    return network.receiveEnergy(maxReceive, simulate);
-  }
-
-  @Override
-  public boolean canConnectEnergy(@Nonnull EnumFacing from) {
-    return getIoMode(from) != IoMode.DISABLED;
-  }
+  // @Override
+  // public void addEnergy(int energy) {
+  // if (network == null) {
+  // setEnergyStored(getEnergyStored() + energy);
+  // } else {
+  // network.addEnergy(energy);
+  // }
+  // }
+  //
+  // @Override
+  // public void setEnergyStored(int stored) {
+  // energyStored = MathHelper.clamp(stored, 0, getMaxEnergyStored());
+  // markDirty();
+  // }
+  //
+  // @Override
+  // public int getEnergyStored() {
+  // return energyStored;
+  // }
+  //
+  // @Override
+  // public int getMaxEnergyStored() {
+  // return getType().getMaxEnergyStored();
+  // }
+  //
+  // @Override
+  // public int getMaxEnergyRecieved(EnumFacing dir) {
+  // return getMaxInput();
+  // }
+  //
+  // @Override
+  // public int getMaxInput() {
+  // if (network == null) {
+  // return getType().getMaxIO();
+  // }
+  // return network.getMaxInput();
+  // }
+  //
+  // public void setMaxInput(int maxInput) {
+  // if (this.maxInput == maxInput) {
+  // return;
+  // }
+  //
+  // if (DiagnosticsConfig.debugTraceCapLimitsExtremelyDetailed.get()) {
+  // StringBuilder sb = new StringBuilder("CapBank ").append(this).append(" input changed from ").append(this.maxInput).append(" to ").append(maxInput);
+  // for (StackTraceElement elem : new Exception("Stackstrace").getStackTrace()) {
+  // sb.append(" at ").append(elem);
+  // }
+  // Log.warn(sb);
+  // }
+  // this.maxInput = maxInput;
+  // markDirty();
+  // }
+  //
+  // public int getMaxInputOverride() {
+  // return maxInput;
+  // }
+  //
+  // @Override
+  // public int getMaxOutput() {
+  // if (network == null) {
+  // return getType().getMaxIO();
+  // }
+  // return network.getMaxOutput();
+  // }
+  //
+  // public void setMaxOutput(int maxOutput) {
+  // if (this.maxOutput == maxOutput) {
+  // return;
+  // }
+  //
+  // if (DiagnosticsConfig.debugTraceCapLimitsExtremelyDetailed.get()) {
+  // StringBuilder sb = new StringBuilder("CapBank ").append(this).append(" output changed from ").append(this.maxOutput).append(" to ").append(maxOutput);
+  // for (StackTraceElement elem : new Exception("Stackstrace").getStackTrace()) {
+  // sb.append(" at ").append(elem);
+  // }
+  // Log.warn(sb);
+  // }
+  // this.maxOutput = maxOutput;
+  // markDirty();
+  // }
+  //
+  // public int getMaxOutputOverride() {
+  // return maxOutput;
+  // }
+  //
+  // @Override
+  // public int receiveEnergy(EnumFacing from, int maxReceive, boolean simulate) {
+  // if (network == null || from == null) {
+  // return 0;
+  // }
+  // IoMode mode = getIoMode(from);
+  // if (mode == IoMode.DISABLED || mode == IoMode.PUSH) {
+  // return 0;
+  // }
+  // return network.receiveEnergy(maxReceive, simulate);
+  // }
+  //
+  // @Override
+  // public boolean canConnectEnergy(@Nonnull EnumFacing from) {
+  // return getIoMode(from) != IoMode.DISABLED;
+  // }
 
   public int getComparatorOutput() {
-    double stored = getEnergyStored();
-    return stored == 0 ? 0 : (int) (1 + stored / getMaxEnergyStored() * 14);
+    // double stored = getEnergyStored();
+    // return stored == 0 ? 0 : (int) (1 + stored / getMaxEnergyStored() * 14);
+    return 0;
   }
 
-  @Override
-  public boolean displayPower() {
-    return true;
-  }
-
-  // ---------------- NBT
-
-  @Override
-  public void readCustomNBT(@Nonnull ItemStack stack) {
-    super.readCustomNBT(stack);
-    energyStored = NbtValue.ENERGY.getInt(stack);
-  }
-
-  @Override
-  public void writeCustomNBT(@Nonnull ItemStack stack) {
-    super.writeCustomNBT(stack);
-    NbtValue.ENERGY.setInt(stack, energyStored);
-    int count = 0;
-    for (int i = 0; i < inventory.size(); i++) {
-      if (Prep.isValid(inventory.get(i))) {
-        count++;
-      }
-    }
-    if (count > 0) {
-      NbtValue.CONTENTCOUNT.setInt(stack, count);
-    }
-  }
+  // @Override
+  // public boolean displayPower() {
+  // return true;
+  // }
 
   @Override
   public @Nonnull BlockPos getLocation() {
     return getPos();
+  }
+
+  @Override
+  public boolean hasCapability(@Nonnull Capability<?> capability, @Nullable EnumFacing facingIn) {
+    if (capability == CapabilityEnergy.ENERGY) {
+      return facingIn == null || getIoMode(facingIn).canInputOrOutput();
+    }
+    return super.hasCapability(capability, facingIn);
+  }
+
+  @SuppressWarnings("unchecked")
+  @Override
+  public <T> T getCapability(@Nonnull Capability<T> capability, @Nullable EnumFacing facingIn) {
+    if (capability == CapabilityEnergy.ENERGY) {
+      return (T) network;
+    }
+    return super.getCapability(capability, facingIn);
   }
 
 }

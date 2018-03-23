@@ -16,19 +16,26 @@ public class NetworkUtil {
 
   private static AtomicInteger nextID = new AtomicInteger((int) (Math.random() * 1000));
 
-  public static void ensureValidNetwork(TileCapBank cap) {
+  /**
+   * Ensures a capacitor bank has a network attached to it
+   * 
+   * @param cap
+   *          The cap bank to ensure
+   * @return true if a new network was created
+   */
+  public static boolean ensureValidNetwork(TileCapBank cap) {
     World world = cap.getWorld();
     Collection<TileCapBank> neighbours = getNeigbours(cap);
-    if(reuseNetwork(cap, neighbours, world)) {
-      return;
+    if (reuseNetwork(cap, neighbours, world)) {
+      return false;
     }
     CapBankNetwork network = new CapBankNetwork(nextID.getAndIncrement());
     network.init(cap, neighbours, world);
-    return;
+    return true;
   }
 
   public static Collection<TileCapBank> getNeigbours(TileCapBank cap) {
-    if(!cap.getType().isMultiblock()) {
+    if (!cap.getType().isMultiblock()) {
       return Collections.emptyList();
     }
     Collection<TileCapBank> res = new ArrayList<TileCapBank>();
@@ -39,9 +46,9 @@ public class NetworkUtil {
   public static void getNeigbours(TileCapBank cap, Collection<TileCapBank> res) {
     for (EnumFacing dir : EnumFacing.values()) {
       TileEntity te = cap.getWorld().getTileEntity(cap.getPos().offset(NullHelper.notnullJ(dir, "Enum.values()")));
-      if(te instanceof TileCapBank) {
+      if (te instanceof TileCapBank) {
         TileCapBank neighbour = (TileCapBank) te;
-        if(neighbour.canConnectTo(cap)) {
+        if (neighbour.canConnectTo(cap)) {
           res.add(neighbour);
         }
       }
@@ -51,18 +58,18 @@ public class NetworkUtil {
   private static boolean reuseNetwork(TileCapBank cap, Collection<TileCapBank> neighbours, World world) {
     ICapBankNetwork network = null;
     for (TileCapBank conduit : neighbours) {
-      if(network == null) {
+      if (network == null) {
         network = conduit.getNetwork();
-      } else if(network != conduit.getNetwork()) {
+      } else if (network != conduit.getNetwork()) {
         return false;
       }
     }
-    if(network == null) {
+    if (network == null) {
       return false;
     }
-    if(cap.setNetwork(network)) {
+    if (cap.setNetwork(network)) {
       network.addMember(cap);
-      //network.notifyNetworkOfUpdate();
+      // network.notifyNetworkOfUpdate();
       return true;
     }
     return false;

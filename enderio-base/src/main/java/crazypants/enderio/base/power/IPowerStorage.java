@@ -4,8 +4,9 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import net.minecraft.util.EnumFacing;
+import net.minecraftforge.energy.IEnergyStorage;
 
-public interface IPowerStorage {
+public interface IPowerStorage extends IEnergyStorage {
 
   @Nullable
   IPowerStorage getController();

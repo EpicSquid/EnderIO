@@ -19,7 +19,7 @@ public interface ICapBankNetwork extends IPowerStorage {
   @Nonnull
   Collection<TileCapBank> getMembers();
 
-  void destroyNetwork();
+  long destroyNetwork();
 
   @Nonnull
   NetworkState getState();
@@ -31,8 +31,6 @@ public interface ICapBankNetwork extends IPowerStorage {
 
   @Override
   void addEnergy(int energy);
-
-  int receiveEnergy(int maxReceive, boolean simulate);
 
   @Override
   long getMaxEnergyStoredL();
